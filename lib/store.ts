@@ -29,6 +29,10 @@ interface BadmintonStore {
 
   // Auto-assign players
   autoAssignPlayers: (courtId: string) => void
+
+  // Reset actions
+  hardReset: () => void
+  gameReset: () => void
 }
 
 export const useBadmintonStore = create<BadmintonStore>()(
@@ -359,6 +363,30 @@ export const useBadmintonStore = create<BadmintonStore>()(
             ],
           }))
         }
+      },
+
+      // Reset actions
+      hardReset: () => {
+        set({
+          players: [],
+          courts: [],
+          activeSessions: [],
+          sessionHistory: [],
+        })
+      },
+
+      gameReset: () => {
+        set((state) => ({
+          // Keep players and courts, but reset game counts and last game times
+          players: state.players.map((player) => ({
+            ...player,
+            gameCount: 0,
+            lastGameTime: null,
+          })),
+          // Clear sessions and history
+          activeSessions: [],
+          sessionHistory: [],
+        }))
       },
     }),
     {

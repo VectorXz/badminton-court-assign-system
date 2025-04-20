@@ -4,11 +4,17 @@ import { CourtManagement } from "@/components/court-management"
 import { GameManagement } from "@/components/game-management"
 import { SessionHistory } from "@/components/session-history"
 import { DataInitializer } from "@/components/data-initializer"
+import { ResetButtons } from "@/components/reset-buttons"
 
 export default function Home() {
   return (
     <main className="container mx-auto py-6 px-4">
-      <h1 className="text-3xl font-bold mb-6">Badminton Court Management System</h1>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
+        <h1 className="text-3xl font-bold">Badminton Court Management System</h1>
+        <div className="mt-4 sm:mt-0">
+          <ResetButtons />
+        </div>
+      </div>
 
       {/* This component ensures data is initialized */}
       <DataInitializer />

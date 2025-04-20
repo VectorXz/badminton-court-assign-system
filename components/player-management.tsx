@@ -95,6 +95,7 @@ export function PlayerManagement() {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-12">#</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Rank</TableHead>
               <TableHead>Games Played</TableHead>
@@ -105,13 +106,14 @@ export function PlayerManagement() {
           <TableBody>
             {players.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center">
+                <TableCell colSpan={6} className="text-center">
                   No players added yet
                 </TableCell>
               </TableRow>
             ) : (
-              players.map((player) => (
+              players.map((player, index) => (
                 <TableRow key={player.id}>
+                  <TableCell>{index + 1}</TableCell>
                   <TableCell>{player.name}</TableCell>
                   <TableCell>
                     <span
