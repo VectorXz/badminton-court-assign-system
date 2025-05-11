@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Minus, Plus, Play, Square, Users, RefreshCw, UserPlus } from "lucide-react"
+import { Minus, Plus, Play, Square, Users, RefreshCw, UserPlus, Pause } from "lucide-react"
 import { formatDate } from "@/lib/utils"
 import { ElapsedTimer } from "@/components/elapsed-timer"
 
@@ -23,6 +23,8 @@ export function CourtCard({ court }: CourtCardProps) {
     removePlayerFromCourt,
     changePlayerInCourt,
     startSession,
+    pauseSession,
+    resumeSession,
     endSession,
     incrementShuttlecock,
     decrementShuttlecock,
@@ -62,13 +64,22 @@ export function CourtCard({ court }: CourtCardProps) {
     session &&
     (!session.players.team1[0] || !session.players.team1[1] || !session.players.team2[0] || !session.players.team2[1])
 
+  // Determine if player slots should be disabled
+  const disablePlayerSlots = session?.isActive && !session?.isPaused
+
   return (
     <Card className="overflow-hidden">
-      <CardHeader className={`${session?.isActive ? "bg-green-100" : "bg-gray-100"}`}>
+      <CardHeader
+        className={`${session?.isActive ? (session?.isPaused ? "bg-yellow-100" : "bg-green-100") : "bg-gray-100"}`}
+      >
         <CardTitle className="flex justify-between items-center">
           <span>{court.name}</span>
           {session?.isActive ? (
-            <span className="text-sm font-normal bg-green-500 text-white px-2 py-1 rounded-full">Active</span>
+            session?.isPaused ? (
+              <span className="text-sm font-normal bg-yellow-500 text-white px-2 py-1 rounded-full">Paused</span>
+            ) : (
+              <span className="text-sm font-normal bg-green-500 text-white px-2 py-1 rounded-full">Active</span>
+            )
           ) : (
             <span className="text-sm font-normal bg-gray-500 text-white px-2 py-1 rounded-full">Inactive</span>
           )}
@@ -81,7 +92,7 @@ export function CourtCard({ court }: CourtCardProps) {
             <div className="space-y-3">
               <PlayerSlot
                 player={team1Player1}
-                disabled={session?.isActive || false}
+                disabled={disablePlayerSlots}
                 onSelect={(playerId) => assignPlayerToCourt(court.id, playerId, "team1", 0)}
                 onRemove={() => removePlayerFromCourt(court.id, "team1", 0)}
                 onChange={() => changePlayerInCourt(court.id, "team1", 0)}
@@ -89,7 +100,7 @@ export function CourtCard({ court }: CourtCardProps) {
               />
               <PlayerSlot
                 player={team1Player2}
-                disabled={session?.isActive || false}
+                disabled={disablePlayerSlots}
                 onSelect={(playerId) => assignPlayerToCourt(court.id, playerId, "team1", 1)}
                 onRemove={() => removePlayerFromCourt(court.id, "team1", 1)}
                 onChange={() => changePlayerInCourt(court.id, "team1", 1)}
@@ -103,7 +114,7 @@ export function CourtCard({ court }: CourtCardProps) {
             <div className="space-y-3">
               <PlayerSlot
                 player={team2Player1}
-                disabled={session?.isActive || false}
+                disabled={disablePlayerSlots}
                 onSelect={(playerId) => assignPlayerToCourt(court.id, playerId, "team2", 0)}
                 onRemove={() => removePlayerFromCourt(court.id, "team2", 0)}
                 onChange={() => changePlayerInCourt(court.id, "team2", 0)}
@@ -111,7 +122,7 @@ export function CourtCard({ court }: CourtCardProps) {
               />
               <PlayerSlot
                 player={team2Player2}
-                disabled={session?.isActive || false}
+                disabled={disablePlayerSlots}
                 onSelect={(playerId) => assignPlayerToCourt(court.id, playerId, "team2", 1)}
                 onRemove={() => removePlayerFromCourt(court.id, "team2", 1)}
                 onChange={() => changePlayerInCourt(court.id, "team2", 1)}
@@ -141,9 +152,16 @@ export function CourtCard({ court }: CourtCardProps) {
               </div>
             </div>
             <div className="text-sm text-gray-500">Started: {formatDate(session.startTime)}</div>
-            <div className="mt-2 bg-green-50 p-2 rounded border border-green-200">
-              <ElapsedTimer startTime={session.startTime} />
-            </div>
+            {session.isPaused ? (
+              <div className="mt-2 bg-yellow-50 p-2 rounded border border-yellow-200">
+                <div className="font-mono text-sm">Session paused</div>
+                <div className="text-xs text-gray-500 mt-1">Paused at: {formatDate(session.pauseTime || "")}</div>
+              </div>
+            ) : (
+              <div className="mt-2 bg-green-50 p-2 rounded border border-green-200">
+                <ElapsedTimer startTime={session.startTime} />
+              </div>
+            )}
           </div>
         )}
 
@@ -187,34 +205,90 @@ export function CourtCard({ court }: CourtCardProps) {
                 Start Session
               </Button>
             </>
-          ) : (
-            <Dialog open={endSessionDialogOpen} onOpenChange={setEndSessionDialogOpen}>
-              <DialogTrigger asChild>
-                <Button variant="destructive" className="flex items-center gap-2 w-full">
-                  <Square size={16} />
-                  End Session
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>End Session</DialogTitle>
-                </DialogHeader>
-                <div className="py-4">
-                  <p className="mb-4">Are you sure you want to end this session?</p>
-                  <p className="mb-4">
-                    <strong>Shuttlecocks used:</strong> {session.shuttlecockCount}
-                  </p>
-                  <div className="flex justify-end gap-2">
-                    <Button variant="outline" onClick={() => setEndSessionDialogOpen(false)}>
-                      Cancel
-                    </Button>
-                    <Button variant="destructive" onClick={handleEndSession}>
-                      End Session
-                    </Button>
+          ) : session.isPaused ? (
+            <div className="flex w-full gap-2">
+              <Button
+                variant="outline"
+                className="flex-1 flex items-center justify-center gap-2 border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
+                onClick={() => resumeSession(court.id)}
+                disabled={
+                  !session.players.team1[0] ||
+                  !session.players.team1[1] ||
+                  !session.players.team2[0] ||
+                  !session.players.team2[1]
+                }
+              >
+                <Play size={16} />
+                Resume Session
+              </Button>
+
+              <Dialog open={endSessionDialogOpen} onOpenChange={setEndSessionDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="destructive" className="flex-1 flex items-center justify-center gap-2">
+                    <Square size={16} />
+                    End Session
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>End Session</DialogTitle>
+                  </DialogHeader>
+                  <div className="py-4">
+                    <p className="mb-4">Are you sure you want to end this session?</p>
+                    <p className="mb-4">
+                      <strong>Shuttlecocks used:</strong> {session.shuttlecockCount}
+                    </p>
+                    <div className="flex justify-end gap-2">
+                      <Button variant="outline" onClick={() => setEndSessionDialogOpen(false)}>
+                        Cancel
+                      </Button>
+                      <Button variant="destructive" onClick={handleEndSession}>
+                        End Session
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              </DialogContent>
-            </Dialog>
+                </DialogContent>
+              </Dialog>
+            </div>
+          ) : (
+            <div className="flex w-full gap-2">
+              <Button
+                variant="outline"
+                className="flex-1 flex items-center justify-center gap-2 border-yellow-200 bg-yellow-50 text-yellow-700 hover:bg-yellow-100"
+                onClick={() => pauseSession(court.id)}
+              >
+                <Pause size={16} />
+                Pause Session
+              </Button>
+
+              <Dialog open={endSessionDialogOpen} onOpenChange={setEndSessionDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="destructive" className="flex-1 flex items-center justify-center gap-2">
+                    <Square size={16} />
+                    End Session
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>End Session</DialogTitle>
+                  </DialogHeader>
+                  <div className="py-4">
+                    <p className="mb-4">Are you sure you want to end this session?</p>
+                    <p className="mb-4">
+                      <strong>Shuttlecocks used:</strong> {session.shuttlecockCount}
+                    </p>
+                    <div className="flex justify-end gap-2">
+                      <Button variant="outline" onClick={() => setEndSessionDialogOpen(false)}>
+                        Cancel
+                      </Button>
+                      <Button variant="destructive" onClick={handleEndSession}>
+                        End Session
+                      </Button>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </div>
           )}
         </div>
       </CardContent>

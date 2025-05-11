@@ -24,6 +24,8 @@ interface BadmintonStore {
   removePlayerFromCourt: (courtId: string, team: "team1" | "team2", position: 0 | 1) => void
   changePlayerInCourt: (courtId: string, team: "team1" | "team2", position: 0 | 1) => void
   startSession: (courtId: string) => void
+  pauseSession: (courtId: string) => void // New action
+  resumeSession: (courtId: string) => void // New action
   endSession: (courtId: string, shuttlecockCount: number) => void
   incrementShuttlecock: (courtId: string) => void
   decrementShuttlecock: (courtId: string) => void
@@ -85,7 +87,7 @@ export const useBadmintonStore = create<BadmintonStore>()(
       deleteCourt: (id) => {
         const { activeSessions } = get()
         // Check if court has active session
-        if (activeSessions.some((session) => session.courtId === id && session.isActive)) {
+        if (activeSessions.some((session) => session.courtId === id && session.isActive && !session.isPaused)) {
           alert("Cannot delete court with active session")
           return
         }
@@ -100,6 +102,12 @@ export const useBadmintonStore = create<BadmintonStore>()(
       assignPlayerToCourt: (courtId, playerId, team, position) => {
         const { activeSessions, players } = get()
         const session = activeSessions.find((s) => s.courtId === courtId)
+
+        // Only allow assignment if session is not active or is paused
+        if (session && session.isActive && !session.isPaused) {
+          alert("Cannot assign players during an active session. Pause the session first.")
+          return
+        }
 
         // Check if player is already assigned to any court
         const isPlayerAssigned = activeSessions.some(
@@ -143,6 +151,8 @@ export const useBadmintonStore = create<BadmintonStore>()(
                 courtId,
                 players: emptyPlayers,
                 startTime: "",
+                pauseTime: null,
+                isPaused: false,
                 endTime: null,
                 shuttlecockCount: 0,
                 isActive: false,
@@ -156,7 +166,13 @@ export const useBadmintonStore = create<BadmintonStore>()(
         const { activeSessions } = get()
         const session = activeSessions.find((s) => s.courtId === courtId)
 
-        if (session && !session.isActive) {
+        // Only allow removal if session is not active or is paused
+        if (session && session.isActive && !session.isPaused) {
+          alert("Cannot remove players during an active session. Pause the session first.")
+          return
+        }
+
+        if (session) {
           set((state) => ({
             activeSessions: state.activeSessions.map((s) => {
               if (s.courtId === courtId) {
@@ -174,7 +190,11 @@ export const useBadmintonStore = create<BadmintonStore>()(
         const { activeSessions, players } = get()
         const session = activeSessions.find((s) => s.courtId === courtId)
 
-        if (!session || session.isActive) return
+        // Only allow changes if session is not active or is paused
+        if (!session || (session.isActive && !session.isPaused)) {
+          alert("Cannot change players during an active session. Pause the session first.")
+          return
+        }
 
         // Get all players who are not currently assigned to any court
         const assignedPlayerIds = activeSessions
@@ -238,7 +258,6 @@ export const useBadmintonStore = create<BadmintonStore>()(
         let bestBalance = Number.MAX_VALUE
 
         for (const player of availablePlayers) {
-
           // Calculate new balance with this player
           let newTeam1Strength = team1Strength
           let newTeam2Strength = team2Strength
@@ -291,7 +310,60 @@ export const useBadmintonStore = create<BadmintonStore>()(
                 return {
                   ...s,
                   isActive: true,
+                  isPaused: false,
+                  pauseTime: null,
                   startTime: new Date().toISOString(),
+                }
+              }
+              return s
+            }),
+          }))
+        }
+      },
+
+      // New pause session action
+      pauseSession: (courtId) => {
+        const { activeSessions } = get()
+        const session = activeSessions.find((s) => s.courtId === courtId)
+
+        if (session && session.isActive && !session.isPaused) {
+          set((state) => ({
+            activeSessions: state.activeSessions.map((s) => {
+              if (s.courtId === courtId) {
+                return {
+                  ...s,
+                  isPaused: true,
+                  pauseTime: new Date().toISOString(),
+                }
+              }
+              return s
+            }),
+          }))
+        }
+      },
+
+      // New resume session action
+      resumeSession: (courtId) => {
+        const { activeSessions } = get()
+        const session = activeSessions.find((s) => s.courtId === courtId)
+
+        if (session && session.isActive && session.isPaused) {
+          // Check if all player slots are filled before resuming
+          const allPlayersFilled =
+            session.players.team1[0] && session.players.team1[1] && session.players.team2[0] && session.players.team2[1]
+
+          if (!allPlayersFilled) {
+            alert("All player slots must be filled to resume the session")
+            return
+          }
+
+          set((state) => ({
+            activeSessions: state.activeSessions.map((s) => {
+              if (s.courtId === courtId) {
+                return {
+                  ...s,
+                  isPaused: false,
+                  pauseTime: null,
                 }
               }
               return s
@@ -325,6 +397,7 @@ export const useBadmintonStore = create<BadmintonStore>()(
             startTime: session.startTime,
             endTime,
             shuttlecockCount,
+            totalPauseDuration: 0, // We'll calculate this in a future update if needed
           }
 
           // Update player stats
@@ -376,6 +449,13 @@ export const useBadmintonStore = create<BadmintonStore>()(
 
       autoAssignPlayers: (courtId) => {
         const { players, activeSessions } = get()
+        const session = activeSessions.find((s) => s.courtId === courtId)
+
+        // Only allow auto-assign if session is not active or is paused
+        if (session && session.isActive && !session.isPaused) {
+          alert("Cannot auto-assign players during an active session. Pause the session first.")
+          return
+        }
 
         // Get all players who are not currently assigned to any court
         const assignedPlayerIds = activeSessions
@@ -428,8 +508,6 @@ export const useBadmintonStore = create<BadmintonStore>()(
         const team2 = [selectedPlayers[1], selectedPlayers[2]]
 
         // Assign the selected players to the court
-        const session = activeSessions.find((s) => s.courtId === courtId)
-
         if (session) {
           // Update existing session
           set((state) => ({
@@ -459,6 +537,8 @@ export const useBadmintonStore = create<BadmintonStore>()(
                   team2: [team2[0].id, team2[1].id] as [string, string],
                 },
                 startTime: "",
+                pauseTime: null,
+                isPaused: false,
                 endTime: null,
                 shuttlecockCount: 0,
                 isActive: false,
@@ -468,19 +548,19 @@ export const useBadmintonStore = create<BadmintonStore>()(
         }
       },
 
-      // New auto-fill function
       autoFillPlayers: (courtId) => {
         const { players, activeSessions } = get()
         const session = activeSessions.find((s) => s.courtId === courtId)
 
-        if (!session) {
-          // If no session exists, just use the regular auto-assign
-          get().autoAssignPlayers(courtId)
+        // Only allow auto-fill if session is not active or is paused
+        if (session && session.isActive && !session.isPaused) {
+          alert("Cannot auto-fill players during an active session. Pause the session first.")
           return
         }
 
-        if (session.isActive) {
-          alert("Cannot auto-fill an active session")
+        if (!session) {
+          // If no session exists, just use the regular auto-assign
+          get().autoAssignPlayers(courtId)
           return
         }
 

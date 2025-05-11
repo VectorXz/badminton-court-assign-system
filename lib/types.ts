@@ -21,6 +21,8 @@ export interface CourtSession {
     team2: [string, string]
   }
   startTime: string
+  pauseTime: string | null // New field to track when session was paused
+  isPaused: boolean // New field to track pause state
   endTime: string | null
   shuttlecockCount: number
   isActive: boolean
@@ -37,4 +39,5 @@ export interface SessionHistoryItem {
   startTime: string
   endTime: string
   shuttlecockCount: number
+  totalPauseDuration: number // New field to track total pause duration
 }

@@ -4,9 +4,10 @@ import { useState, useEffect } from "react"
 
 interface ElapsedTimerProps {
   startTime: string
+  pauseTime?: string | null
 }
 
-export function ElapsedTimer({ startTime }: ElapsedTimerProps) {
+export function ElapsedTimer({ startTime, pauseTime }: ElapsedTimerProps) {
   const [elapsedTime, setElapsedTime] = useState("")
 
   useEffect(() => {
@@ -35,7 +36,7 @@ export function ElapsedTimer({ startTime }: ElapsedTimerProps) {
     }, 1000)
 
     return () => clearInterval(interval)
-  }, [startTime])
+  }, [startTime, pauseTime])
 
   return (
     <div className="font-mono text-sm">
