@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Minus, Plus, Play, Square, Users } from "lucide-react"
+import { Minus, Plus, Play, Square, Users, RefreshCw, UserPlus } from "lucide-react"
 import { formatDate } from "@/lib/utils"
 import { ElapsedTimer } from "@/components/elapsed-timer"
 
@@ -21,11 +21,13 @@ export function CourtCard({ court }: CourtCardProps) {
     activeSessions,
     assignPlayerToCourt,
     removePlayerFromCourt,
+    changePlayerInCourt,
     startSession,
     endSession,
     incrementShuttlecock,
     decrementShuttlecock,
     autoAssignPlayers,
+    autoFillPlayers,
   } = useBadmintonStore()
 
   const [endSessionDialogOpen, setEndSessionDialogOpen] = useState(false)
@@ -55,6 +57,11 @@ export function CourtCard({ court }: CourtCardProps) {
     }
   }
 
+  // Check if there are any empty slots
+  const hasEmptySlots =
+    session &&
+    (!session.players.team1[0] || !session.players.team1[1] || !session.players.team2[0] || !session.players.team2[1])
+
   return (
     <Card className="overflow-hidden">
       <CardHeader className={`${session?.isActive ? "bg-green-100" : "bg-gray-100"}`}>
@@ -77,6 +84,7 @@ export function CourtCard({ court }: CourtCardProps) {
                 disabled={session?.isActive || false}
                 onSelect={(playerId) => assignPlayerToCourt(court.id, playerId, "team1", 0)}
                 onRemove={() => removePlayerFromCourt(court.id, "team1", 0)}
+                onChange={() => changePlayerInCourt(court.id, "team1", 0)}
                 availablePlayers={availablePlayers}
               />
               <PlayerSlot
@@ -84,6 +92,7 @@ export function CourtCard({ court }: CourtCardProps) {
                 disabled={session?.isActive || false}
                 onSelect={(playerId) => assignPlayerToCourt(court.id, playerId, "team1", 1)}
                 onRemove={() => removePlayerFromCourt(court.id, "team1", 1)}
+                onChange={() => changePlayerInCourt(court.id, "team1", 1)}
                 availablePlayers={availablePlayers}
               />
             </div>
@@ -97,6 +106,7 @@ export function CourtCard({ court }: CourtCardProps) {
                 disabled={session?.isActive || false}
                 onSelect={(playerId) => assignPlayerToCourt(court.id, playerId, "team2", 0)}
                 onRemove={() => removePlayerFromCourt(court.id, "team2", 0)}
+                onChange={() => changePlayerInCourt(court.id, "team2", 0)}
                 availablePlayers={availablePlayers}
               />
               <PlayerSlot
@@ -104,6 +114,7 @@ export function CourtCard({ court }: CourtCardProps) {
                 disabled={session?.isActive || false}
                 onSelect={(playerId) => assignPlayerToCourt(court.id, playerId, "team2", 1)}
                 onRemove={() => removePlayerFromCourt(court.id, "team2", 1)}
+                onChange={() => changePlayerInCourt(court.id, "team2", 1)}
                 availablePlayers={availablePlayers}
               />
             </div>
@@ -136,7 +147,7 @@ export function CourtCard({ court }: CourtCardProps) {
           </div>
         )}
 
-        <div className="flex gap-2 justify-between">
+        <div className="flex gap-2 justify-between flex-wrap">
           {!session?.isActive ? (
             <>
               <Button
@@ -148,6 +159,18 @@ export function CourtCard({ court }: CourtCardProps) {
                 <Users size={16} />
                 Auto Assign
               </Button>
+
+              {hasEmptySlots && (
+                <Button
+                  variant="outline"
+                  className="flex items-center gap-2 border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
+                  onClick={() => autoFillPlayers(court.id)}
+                  disabled={availablePlayers.length < 1}
+                >
+                  <UserPlus size={16} />
+                  Auto Fill
+                </Button>
+              )}
 
               <Button
                 className="flex items-center gap-2"
@@ -204,10 +227,11 @@ interface PlayerSlotProps {
   disabled: boolean
   onSelect: (playerId: string) => void
   onRemove: () => void
+  onChange: () => void
   availablePlayers: any[]
 }
 
-function PlayerSlot({ player, disabled, onSelect, onRemove, availablePlayers }: PlayerSlotProps) {
+function PlayerSlot({ player, disabled, onSelect, onRemove, onChange, availablePlayers }: PlayerSlotProps) {
   const [isSelectOpen, setIsSelectOpen] = useState(false)
 
   if (player) {
@@ -231,9 +255,21 @@ function PlayerSlot({ player, disabled, onSelect, onRemove, availablePlayers }: 
           </div>
         </div>
         {!disabled && (
-          <Button variant="ghost" size="sm" onClick={onRemove}>
-            Remove
-          </Button>
+          <div className="flex gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onChange}
+              disabled={availablePlayers.length === 0}
+              title="Change player"
+              className="px-2"
+            >
+              <RefreshCw size={14} />
+            </Button>
+            <Button variant="ghost" size="sm" onClick={onRemove} className="px-2">
+              Remove
+            </Button>
+          </div>
         )}
       </div>
     )
@@ -251,19 +287,22 @@ function PlayerSlot({ player, disabled, onSelect, onRemove, availablePlayers }: 
           ) : (
             availablePlayers.map((player) => (
               <SelectItem key={player.id} value={player.id}>
-                <div className="flex items-center gap-2">
-                  <span>{player.name}</span>
-                  <span
-                    className={`text-xs px-1.5 py-0.5 rounded-full ${
-                      player.rank === "Beginner"
-                        ? "bg-blue-100 text-blue-800"
-                        : player.rank === "Mid"
-                          ? "bg-green-100 text-green-800"
-                          : "bg-purple-100 text-purple-800"
-                    }`}
-                  >
-                    {player.rank}
-                  </span>
+                <div className="flex items-center justify-between w-full">
+                  <div className="flex items-center gap-2">
+                    <span>{player.name}</span>
+                    <span
+                      className={`text-xs px-1.5 py-0.5 rounded-full ${
+                        player.rank === "Beginner"
+                          ? "bg-blue-100 text-blue-800"
+                          : player.rank === "Mid"
+                            ? "bg-green-100 text-green-800"
+                            : "bg-purple-100 text-purple-800"
+                      }`}
+                    >
+                      {player.rank}
+                    </span>
+                  </div>
+                  <span className="text-xs text-gray-500">{player.gameCount} games</span>
                 </div>
               </SelectItem>
             ))

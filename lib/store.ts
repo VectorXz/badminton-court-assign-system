@@ -22,6 +22,7 @@ interface BadmintonStore {
   // Game management actions
   assignPlayerToCourt: (courtId: string, playerId: string, team: "team1" | "team2", position: 0 | 1) => void
   removePlayerFromCourt: (courtId: string, team: "team1" | "team2", position: 0 | 1) => void
+  changePlayerInCourt: (courtId: string, team: "team1" | "team2", position: 0 | 1) => void
   startSession: (courtId: string) => void
   endSession: (courtId: string, shuttlecockCount: number) => void
   incrementShuttlecock: (courtId: string) => void
@@ -29,6 +30,7 @@ interface BadmintonStore {
 
   // Auto-assign players
   autoAssignPlayers: (courtId: string) => void
+  autoFillPlayers: (courtId: string) => void
 
   // Reset actions
   hardReset: () => void
@@ -166,6 +168,107 @@ export const useBadmintonStore = create<BadmintonStore>()(
             }),
           }))
         }
+      },
+
+      changePlayerInCourt: (courtId, team, position) => {
+        const { activeSessions, players } = get()
+        const session = activeSessions.find((s) => s.courtId === courtId)
+
+        if (!session || session.isActive) return
+
+        // Get all players who are not currently assigned to any court
+        const assignedPlayerIds = activeSessions
+          .flatMap((s) => [...s.players.team1, ...s.players.team2])
+          .filter((id) => id !== "")
+
+        // Get available players (not assigned to any court)
+        const availablePlayers = players.filter((player) => !assignedPlayerIds.includes(player.id))
+
+        if (availablePlayers.length === 0) {
+          alert("No available players to swap with")
+          return
+        }
+
+        // Get the current player's rank
+        const currentPlayerId = session.players[team][position]
+        if (!currentPlayerId) return
+
+        const currentPlayer = players.find((p) => p.id === currentPlayerId)
+        if (!currentPlayer) return
+
+        // Get all players in the current session
+        const team1Player0 = session.players.team1[0] ? players.find((p) => p.id === session.players.team1[0]) : null
+        const team1Player1 = session.players.team1[1] ? players.find((p) => p.id === session.players.team1[1]) : null
+        const team2Player0 = session.players.team2[0] ? players.find((p) => p.id === session.players.team2[0]) : null
+        const team2Player1 = session.players.team2[1] ? players.find((p) => p.id === session.players.team2[1]) : null
+
+        // Calculate the current team balance
+        const rankValue = (rank: PlayerRank): number => {
+          if (rank === "Beginner") return 1
+          if (rank === "Mid") return 2
+          return 3
+        }
+
+        // Calculate team strengths without the player being changed
+        let team1Strength = 0
+        let team2Strength = 0
+
+        if (team === "team1") {
+          // Removing from team1
+          if (position === 0) {
+            if (team1Player1) team1Strength += rankValue(team1Player1.rank)
+          } else {
+            if (team1Player0) team1Strength += rankValue(team1Player0.rank)
+          }
+          if (team2Player0) team2Strength += rankValue(team2Player0.rank)
+          if (team2Player1) team2Strength += rankValue(team2Player1.rank)
+        } else {
+          // Removing from team2
+          if (position === 0) {
+            if (team2Player1) team2Strength += rankValue(team2Player1.rank)
+          } else {
+            if (team2Player0) team2Strength += rankValue(team2Player0.rank)
+          }
+          if (team1Player0) team1Strength += rankValue(team1Player0.rank)
+          if (team1Player1) team1Strength += rankValue(team1Player1.rank)
+        }
+
+        // Find the best replacement player that balances the teams
+        let bestPlayer = availablePlayers[0]
+        let bestBalance = Number.MAX_VALUE
+
+        for (const player of availablePlayers) {
+
+          // Calculate new balance with this player
+          let newTeam1Strength = team1Strength
+          let newTeam2Strength = team2Strength
+
+          if (team === "team1") {
+            newTeam1Strength += rankValue(player.rank)
+          } else {
+            newTeam2Strength += rankValue(player.rank)
+          }
+
+          const balance = Math.abs(newTeam1Strength - newTeam2Strength)
+
+          // If this creates better balance, select this player
+          if (balance < bestBalance) {
+            bestBalance = balance
+            bestPlayer = player
+          }
+        }
+
+        // Assign the best player to replace the current one
+        set((state) => ({
+          activeSessions: state.activeSessions.map((s) => {
+            if (s.courtId === courtId) {
+              const newPlayers = { ...s.players }
+              newPlayers[team][position] = bestPlayer.id
+              return { ...s, players: newPlayers }
+            }
+            return s
+          }),
+        }))
       },
 
       startSession: (courtId) => {
@@ -363,6 +466,146 @@ export const useBadmintonStore = create<BadmintonStore>()(
             ],
           }))
         }
+      },
+
+      // New auto-fill function
+      autoFillPlayers: (courtId) => {
+        const { players, activeSessions } = get()
+        const session = activeSessions.find((s) => s.courtId === courtId)
+
+        if (!session) {
+          // If no session exists, just use the regular auto-assign
+          get().autoAssignPlayers(courtId)
+          return
+        }
+
+        if (session.isActive) {
+          alert("Cannot auto-fill an active session")
+          return
+        }
+
+        // Count empty slots and collect existing players
+        const existingPlayers = {
+          team1: [
+            session.players.team1[0] ? players.find((p) => p.id === session.players.team1[0]) : null,
+            session.players.team1[1] ? players.find((p) => p.id === session.players.team1[1]) : null,
+          ],
+          team2: [
+            session.players.team2[0] ? players.find((p) => p.id === session.players.team2[0]) : null,
+            session.players.team2[1] ? players.find((p) => p.id === session.players.team2[1]) : null,
+          ],
+        }
+
+        const emptySlots = [
+          { team: "team1" as const, position: 0 as const, isEmpty: !session.players.team1[0] },
+          { team: "team1" as const, position: 1 as const, isEmpty: !session.players.team1[1] },
+          { team: "team2" as const, position: 0 as const, isEmpty: !session.players.team2[0] },
+          { team: "team2" as const, position: 1 as const, isEmpty: !session.players.team2[1] },
+        ].filter((slot) => slot.isEmpty)
+
+        const emptySlotCount = emptySlots.length
+
+        if (emptySlotCount === 0) {
+          alert("No empty slots to fill")
+          return
+        }
+
+        // Get all players who are not currently assigned to any court
+        const assignedPlayerIds = activeSessions
+          .flatMap((s) => [...s.players.team1, ...s.players.team2])
+          .filter((id) => id !== "")
+
+        // First prioritize by game count, then by last game time
+        const availablePlayers = players
+          .filter((player) => !assignedPlayerIds.includes(player.id))
+          .sort((a, b) => {
+            // Primary sort: game count (lowest first)
+            if (a.gameCount !== b.gameCount) {
+              return a.gameCount - b.gameCount
+            }
+
+            // Secondary sort: last game time (oldest first)
+            if (a.lastGameTime === null && b.lastGameTime === null) return 0
+            if (a.lastGameTime === null) return -1
+            if (b.lastGameTime === null) return 1
+            return new Date(a.lastGameTime).getTime() - new Date(b.lastGameTime).getTime()
+          })
+
+        if (availablePlayers.length < emptySlotCount) {
+          alert(`Not enough available players. Need ${emptySlotCount} but only ${availablePlayers.length} available.`)
+          return
+        }
+
+        // Take only the number of players we need
+        const playersToAssign = availablePlayers.slice(0, emptySlotCount)
+
+        // Calculate rank values for balancing
+        const rankValue = (rank: PlayerRank | undefined): number => {
+          if (rank === "Beginner") return 1
+          if (rank === "Mid") return 2
+          if (rank === "Pro") return 3
+          return 0 // For null/undefined
+        }
+
+        // Calculate current team strengths
+        let team1Strength = existingPlayers.team1.reduce((sum, player) => sum + rankValue(player?.rank), 0)
+        let team2Strength = existingPlayers.team2.reduce((sum, player) => sum + rankValue(player?.rank), 0)
+
+        // Assign players to empty slots to balance teams
+        const newPlayers = { ...session.players }
+
+        // Sort players by rank for better distribution
+        playersToAssign.sort((a, b) => rankValue(a.rank) - rankValue(b.rank))
+
+        // Assign players to balance teams
+        for (const player of playersToAssign) {
+          // Find which team needs this player more to balance
+          const team1NewStrength = team1Strength + rankValue(player.rank)
+          const team2NewStrength = team2Strength + rankValue(player.rank)
+
+          // Calculate which assignment would create better balance
+          const balanceIfTeam1 = Math.abs(team1NewStrength - team2Strength)
+          const balanceIfTeam2 = Math.abs(team1Strength - team2NewStrength)
+
+          let assignedTeam: "team1" | "team2"
+          let position: 0 | 1
+
+          if (balanceIfTeam1 <= balanceIfTeam2) {
+            // Assign to team1 if it creates better balance
+            assignedTeam = "team1"
+            // Find empty position in team1
+            position = !newPlayers.team1[0] ? 0 : 1
+            team1Strength = team1NewStrength
+          } else {
+            // Assign to team2
+            assignedTeam = "team2"
+            // Find empty position in team2
+            position = !newPlayers.team2[0] ? 0 : 1
+            team2Strength = team2NewStrength
+          }
+
+          // Make the assignment
+          newPlayers[assignedTeam][position] = player.id
+
+          // Remove this slot from empty slots
+          const slotIndex = emptySlots.findIndex((slot) => slot.team === assignedTeam && slot.position === position)
+          if (slotIndex >= 0) {
+            emptySlots.splice(slotIndex, 1)
+          }
+        }
+
+        // Update the session with new players
+        set((state) => ({
+          activeSessions: state.activeSessions.map((s) => {
+            if (s.courtId === courtId) {
+              return {
+                ...s,
+                players: newPlayers,
+              }
+            }
+            return s
+          }),
+        }))
       },
 
       // Reset actions
