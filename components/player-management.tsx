@@ -226,7 +226,10 @@ function QuickAddPlayers() {
 
     setFrequentPlayers((currentPlayers) => {
       const updatedPlayers = [...currentPlayers]
-      updatedPlayers[index].selected = !updatedPlayers[index].selected
+      updatedPlayers[index] = {
+        ...updatedPlayers[index],
+        selected: !updatedPlayers[index].selected,
+      }
       return updatedPlayers
     })
   }
@@ -267,9 +270,9 @@ function QuickAddPlayers() {
                   ? "bg-gray-100 border-gray-200 opacity-70 cursor-not-allowed"
                   : player.selected
                     ? "bg-blue-50 border-blue-200 cursor-pointer"
-                    : "cursor-pointer"
+                    : "cursor-pointer hover:bg-gray-50"
               }`}
-              onClick={() => !player.alreadyAdded && togglePlayerSelection(index)}
+              onClick={() => togglePlayerSelection(index)}
             >
               {player.alreadyAdded ? (
                 <div className="h-4 w-4 flex items-center justify-center text-green-600">

@@ -483,29 +483,98 @@ export const useBadmintonStore = create<BadmintonStore>()(
           return
         }
 
-        // Take the 4 players with lowest game count
-        const selectedPlayers = availablePlayers.slice(0, 4)
-
-        // Now distribute them to balance teams by rank
-        // Sort by rank strength (Beginner = 1, Mid = 2, Pro = 3)
+        // Helper function to calculate rank value
         const rankValue = (rank: PlayerRank): number => {
           if (rank === "Beginner") return 1
           if (rank === "Mid") return 2
           return 3
         }
 
-        // Calculate total rank value for each player
-        selectedPlayers.forEach((player) => {
-          ;(player as any).rankValue = rankValue(player.rank)
+        // Helper function to generate combinations of n items from array
+        const getCombinations = <T>(arr: T[], n: number): T[][] => {
+          if (n === 1) return arr.map(item => [item])
+          if (n === arr.length) return [arr]
+          
+          const result: T[][] = []
+          for (let i = 0; i <= arr.length - n; i++) {
+            const head = arr[i]
+            const tailCombinations = getCombinations(arr.slice(i + 1), n - 1)
+            for (const tail of tailCombinations) {
+              result.push([head, ...tail])
+            }
+          }
+          return result
+        }
+
+        // Helper function to generate all possible team splits for 4 players
+        const getTeamSplits = (fourPlayers: Player[]) => {
+          const [p1, p2, p3, p4] = fourPlayers
+          return [
+            { team1: [p1, p2], team2: [p3, p4] },
+            { team1: [p1, p3], team2: [p2, p4] },
+            { team1: [p1, p4], team2: [p2, p3] }
+          ]
+        }
+
+        // Generate all possible combinations of 4 players
+        // Limit to top 12 players to avoid performance issues with too many combinations
+        const topPlayers = availablePlayers.slice(0, Math.min(12, availablePlayers.length))
+        const playerCombinations = getCombinations(topPlayers, 4)
+
+        // Generate all possible balanced team arrangements
+        const balancedArrangements: Array<{
+          team1: [Player, Player]
+          team2: [Player, Player]
+          balance: number
+          totalGameCount: number
+        }> = []
+
+        for (const combination of playerCombinations) {
+          const teamSplits = getTeamSplits(combination)
+          
+          for (const split of teamSplits) {
+            const team1Strength = split.team1.reduce((sum, player) => sum + rankValue(player.rank), 0)
+            const team2Strength = split.team2.reduce((sum, player) => sum + rankValue(player.rank), 0)
+            const balance = Math.abs(team1Strength - team2Strength)
+            const totalGameCount = combination.reduce((sum, player) => sum + player.gameCount, 0)
+            
+            balancedArrangements.push({
+              team1: [split.team1[0], split.team1[1]] as [Player, Player],
+              team2: [split.team2[0], split.team2[1]] as [Player, Player],
+              balance,
+              totalGameCount
+            })
+          }
+        }
+
+        if (balancedArrangements.length === 0) {
+          alert("No balanced arrangements found")
+          return
+        }
+
+        // Sort by balance (best balance first), then by total game count (lowest first)
+        balancedArrangements.sort((a, b) => {
+          if (a.balance !== b.balance) {
+            return a.balance - b.balance
+          }
+          return a.totalGameCount - b.totalGameCount
         })
 
-        // Sort by rank value
-        selectedPlayers.sort((a, b) => (a as any).rankValue - (b as any).rankValue)
+        // Get the best balance value
+        const bestBalance = balancedArrangements[0].balance
 
-        // Distribute in a way that balances total rank value
-        // [0, 3] and [1, 2] distribution for most balanced teams
-        const team1 = [selectedPlayers[0], selectedPlayers[3]]
-        const team2 = [selectedPlayers[1], selectedPlayers[2]]
+        // Filter to only include arrangements with the best balance
+        const bestArrangements = balancedArrangements.filter(arr => arr.balance === bestBalance)
+
+        // If we have multiple best arrangements, further filter by lowest total game count
+        const lowestGameCount = Math.min(...bestArrangements.map(arr => arr.totalGameCount))
+        const finalCandidates = bestArrangements.filter(arr => arr.totalGameCount === lowestGameCount)
+
+        // Randomly select one from the final candidates
+        const randomIndex = Math.floor(Math.random() * finalCandidates.length)
+        const selectedArrangement = finalCandidates[randomIndex]
+
+        console.log(`Auto-assign: Found ${playerCombinations.length} player combinations, ${balancedArrangements.length} total arrangements, ${finalCandidates.length} optimal arrangements. Selected arrangement with balance ${selectedArrangement.balance} and total game count ${selectedArrangement.totalGameCount}.`)
 
         // Assign the selected players to the court
         if (session) {
@@ -516,8 +585,8 @@ export const useBadmintonStore = create<BadmintonStore>()(
                 return {
                   ...s,
                   players: {
-                    team1: [team1[0].id, team1[1].id] as [string, string],
-                    team2: [team2[0].id, team2[1].id] as [string, string],
+                    team1: [selectedArrangement.team1[0].id, selectedArrangement.team1[1].id] as [string, string],
+                    team2: [selectedArrangement.team2[0].id, selectedArrangement.team2[1].id] as [string, string],
                   },
                 }
               }
@@ -533,8 +602,8 @@ export const useBadmintonStore = create<BadmintonStore>()(
                 id: crypto.randomUUID(),
                 courtId,
                 players: {
-                  team1: [team1[0].id, team1[1].id] as [string, string],
-                  team2: [team2[0].id, team2[1].id] as [string, string],
+                  team1: [selectedArrangement.team1[0].id, selectedArrangement.team1[1].id] as [string, string],
+                  team2: [selectedArrangement.team2[0].id, selectedArrangement.team2[1].id] as [string, string],
                 },
                 startTime: "",
                 pauseTime: null,
@@ -584,32 +653,6 @@ export const useBadmintonStore = create<BadmintonStore>()(
         ].filter((slot) => slot.isEmpty)
 
         const emptySlotCount = emptySlots.length
-
-        if (emptySlotCount === 0) {
-          alert("No empty slots to fill")
-          return
-        }
-
-        // Get all players who are not currently assigned to any court
-        const assignedPlayerIds = activeSessions
-          .flatMap((s) => [...s.players.team1, ...s.players.team2])
-          .filter((id) => id !== "")
-
-        // First prioritize by game count, then by last game time
-        const availablePlayers = players
-          .filter((player) => !assignedPlayerIds.includes(player.id))
-          .sort((a, b) => {
-            // Primary sort: game count (lowest first)
-            if (a.gameCount !== b.gameCount) {
-              return a.gameCount - b.gameCount
-            }
-
-            // Secondary sort: last game time (oldest first)
-            if (a.lastGameTime === null && b.lastGameTime === null) return 0
-            if (a.lastGameTime === null) return -1
-            if (b.lastGameTime === null) return 1
-            return new Date(a.lastGameTime).getTime() - new Date(b.lastGameTime).getTime()
-          })
 
         if (availablePlayers.length < emptySlotCount) {
           alert(`Not enough available players. Need ${emptySlotCount} but only ${availablePlayers.length} available.`)
