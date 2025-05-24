@@ -203,6 +203,10 @@ function QuickAddPlayers() {
     { name: "มีน", rank: "Pro", selected: false, alreadyAdded: false },
     { name: "อิง", rank: "Mid", selected: false, alreadyAdded: false },
     { name: "บีม", rank: "Pro", selected: false, alreadyAdded: false },
+    { name: "ภัทร", rank: "Pro", selected: false, alreadyAdded: false },
+    { name: "อิงค์ ICT", rank: "Pro", selected: false, alreadyAdded: false },
+    { name: "ก็อต", rank: "Mid", selected: false, alreadyAdded: false },
+    { name: "แม็ก", rank: "Mid", selected: false, alreadyAdded: false },
   ])
 
   // Check which players are already added whenever the players list changes
